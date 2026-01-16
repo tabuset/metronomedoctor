@@ -1,0 +1,602 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <!-- viewport-fit=cover を追加してiPhoneのノッチエリアなどの余白対策 -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>メトロノーム・ドクター</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;700&family=Zen+Maru+Gothic:wght@500;700;900&display=swap" rel="stylesheet">
+    <style>
+        /* 100dvh を使用してモバイルブラウザのアドレスバーによるガタつきを防止 
+           safe-area-inset を考慮してiPhone X以降の下部バーに被らないように調整
+        */
+        body {
+            font-family: 'Zen Maru Gothic', sans-serif;
+            background-color: #FFFBEB; /* yellow-50 */
+            background-image: radial-gradient(#FDE68A 1px, transparent 1px);
+            background-size: 20px 20px;
+            color: #451a03; /* amber-950 */
+            touch-action: manipulation;
+            height: 100dvh; /* dynamic viewport height */
+            width: 100vw;
+            overflow: hidden;
+            display: flex;
+            justify-content: center;
+        }
+
+        .mono-font {
+            font-family: 'Fredoka', sans-serif;
+            letter-spacing: 0.05em;
+        }
+
+        .pop-panel {
+            background: #ffffff;
+            border: 3px solid #FCD34D; /* amber-300 */
+            border-radius: 20px;
+            box-shadow: 4px 4px 0px 0px #FDE68A; /* amber-200 */
+        }
+
+        .pop-btn {
+            transition: all 0.1s;
+            border-bottom-width: 4px;
+        }
+        .pop-btn:active {
+            transform: translateY(2px);
+            border-bottom-width: 2px;
+            box-shadow: none !important;
+        }
+
+        /* アニメーション */
+        @keyframes flash {
+            0% { background-color: #F472B6; transform: scale(1.1); }
+            100% { background-color: transparent; transform: scale(1); }
+        }
+        .beat-flash {
+            animation: flash 0.08s ease-out;
+        }
+        
+        input[type=range] {
+            -webkit-appearance: none;
+            background: transparent;
+        }
+        input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            height: 24px;
+            width: 24px;
+            border-radius: 50%;
+            background: #F472B6; /* pink-400 */
+            border: 2px solid #ffffff;
+            cursor: pointer;
+            margin-top: -8px;
+            box-shadow: 2px 2px 0px rgba(0,0,0,0.1);
+        }
+        input[type=range]::-webkit-slider-runnable-track {
+            width: 100%;
+            height: 8px;
+            cursor: pointer;
+            background: #E2E8F0;
+            border-radius: 4px;
+        }
+        
+        .active-value {
+            color: #0EA5E9; /* sky-500 */
+            transition: none;
+            transform: scale(1.05);
+        }
+        .inactive-value {
+            color: #CBD5E1; /* slate-300 */
+            transition: color 0.1s ease-out;
+            transform: scale(1);
+        }
+
+        .direction-label {
+            font-size: 0.7rem;
+            color: #94a3b8;
+            margin-left: 0.2rem;
+            font-weight: bold;
+        }
+        
+        .unit-label {
+            position: absolute;
+            bottom: 6px;
+            right: 10px;
+            font-size: 10px;
+            font-weight: bold;
+            color: #94a3b8;
+            pointer-events: none;
+        }
+
+        /* iPhoneの下部バー対策 */
+        .safe-pb {
+            padding-bottom: env(safe-area-inset-bottom, 10px);
+        }
+    </style>
+</head>
+<body>
+
+    <!-- 
+        app-container: 
+        スケーリング処理を廃止し、flexboxで高さを埋めるように変更 
+        max-w-md でタブレット以上では横幅を制限しつつ、スマホでは幅いっぱいに
+    -->
+    <div id="app-container" class="w-full max-w-md h-full flex flex-col p-3 safe-pb">
+
+        <!-- Header: 高さは固定(shrink-0) -->
+        <header class="w-full mt-1 mb-2 flex justify-between items-center px-1 shrink-0">
+            <h1 class="text-sm font-black text-amber-500 tracking-tight flex items-center gap-1 whitespace-nowrap">
+                <span class="text-lg">🎵</span> メトロノーム・ドクター
+            </h1>
+            <button id="swapBtn" class="text-[10px] font-bold bg-white border-2 border-amber-200 text-amber-600 px-3 py-1 rounded-full hover:bg-amber-50 transition-colors flex items-center gap-1 shadow-sm pop-btn shrink-0" title="書き込み順序を入れ替える">
+                <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" fill="currentColor" viewBox="0 0 16 16">
+                    <path fill-rule="evenodd" d="M1 11.5a.5.5 0 0 0 .5.5h11.793l-3.147 3.146a.5.5 0 0 0 .708.708l4-4a.5.5 0 0 0 0-.708l-4-4a.5.5 0 0 0-.708.708L13.293 11H1.5a.5.5 0 0 0-.5.5zm14-7a.5.5 0 0 0-.5-.5H2.707l3.147-3.146a.5.5 0 1 0-.708-.708l-4 4a.5.5 0 0 0 0 .708l4 4a.5.5 0 0 0 .708-.708L2.707 4.5H14.5a.5.5 0 0 0 .5-.5z"/>
+                </svg>
+                左右はんてん
+            </button>
+        </header>
+
+        <!-- Main Content: flex-grow で余った縦幅を埋める -->
+        <main class="w-full flex flex-col gap-3 flex-grow min-h-0">
+            
+            <!-- 上部パネル: ここを flex-grow にして、画面が縦に長い場合にここが広がるようにする -->
+            <div class="pop-panel p-4 relative overflow-hidden flex flex-col justify-between flex-grow">
+                <div id="beatIndicator" class="absolute top-0 right-0 w-4 h-4 rounded-full m-2 border-2 border-slate-200 bg-slate-100 transition-colors"></div>
+                
+                <!-- 2列レイアウト (BPM / ズレ率) -->
+                <!-- mt-auto mb-auto で垂直方向の中央寄せバランスを取る -->
+                <div class="grid grid-cols-2 gap-2 text-center items-end mt-2">
+                    <!-- BPM表示 -->
+                    <div class="flex flex-col justify-center">
+                        <div class="text-amber-700/60 text-[10px] font-bold mb-0.5">テンポ (BPM)</div>
+                        <div id="bpmDisplay" class="text-5xl font-bold text-amber-500 mono-font tracking-tight">--.-</div>
+                    </div>
+
+                    <!-- ズレ率表示 -->
+                    <div class="flex flex-col justify-center border-l-2 border-amber-100">
+                        <div class="text-amber-700/60 text-[10px] font-bold mb-0.5">右のズレ</div>
+                        <div class="flex items-baseline justify-center gap-1">
+                            <div id="deviationDisplay" class="text-5xl font-bold text-slate-300 mono-font">--</div>
+                            <span class="text-sm text-amber-700/60 font-bold">%</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- アドバイス表示エリア -->
+                <div id="adviceBox" class="py-3 px-3 my-2 rounded-xl bg-amber-50 border-2 border-amber-100 min-h-[60px] flex items-center justify-center flex-grow-0">
+                    <p id="adviceText" class="text-sm font-bold text-amber-800/60">じゅんびOK！「スタート」をおしてね</p>
+                </div>
+
+                <!-- 詳細データ (Intervals) -->
+                <div class="grid grid-cols-2 gap-3 text-center text-sm mb-1">
+                    <!-- 左(A) -->
+                    <div id="containerA" class="relative rounded-xl p-3 bg-slate-50 border-2 border-slate-100 transition-colors pb-6 h-full flex flex-col justify-center">
+                        <span class="text-slate-400 font-bold text-[10px] block mb-1">カチッ <span class="direction-label">(左へ)</span></span>
+                        <div class="flex items-center justify-center flex-grow">
+                            <span id="intervalA" class="mono-font text-3xl font-bold text-slate-300">--</span>
+                        </div>
+                        <span class="unit-label">ミリ秒</span>
+                    </div>
+                    <!-- 右(B) -->
+                    <div id="containerB" class="relative rounded-xl p-3 bg-slate-50 border-2 border-slate-100 transition-colors pb-6 h-full flex flex-col justify-center">
+                        <span class="text-slate-400 font-bold text-[10px] block mb-1">コチッ <span class="direction-label">(右へ)</span></span>
+                        <div class="flex items-center justify-center flex-grow">
+                            <span id="intervalB" class="mono-font text-3xl font-bold text-slate-300">--</span>
+                        </div>
+                        <span class="unit-label">ミリ秒</span>
+                    </div>
+                </div>
+                
+                <!-- 注意書き -->
+                <div class="text-[10px] text-center text-amber-800/60 font-bold mt-1 tracking-tight">※光るじゅんばんが逆なら「左右はんてん」ボタン</div>
+            </div>
+
+            <!-- コントロールパネル: 高さはコンテンツなり(shrink-0) -->
+            <div class="pop-panel p-3 flex flex-col gap-3 shrink-0">
+                <div class="flex justify-between items-center gap-2">
+                    <button id="startBtn" class="pop-btn bg-sky-400 hover:bg-sky-300 border-sky-500 text-white font-black py-3 px-6 rounded-xl w-full shadow-lg flex items-center justify-center gap-2 text-base h-12">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="currentColor" viewBox="0 0 16 16">
+                            <path d="M8 15A7 7 0 1 1 8 1a7 7 0 0 1 0 14zm0 1A8 8 0 1 0 8 0a8 8 0 0 0 0 16z"/>
+                            <path d="M6.271 5.055a.5.5 0 0 1 .52.038l3.5 2.5a.5.5 0 0 1 0 .814l-3.5 2.5A.5.5 0 0 1 6 10.5v-5a.5.5 0 0 1 .271-.445z"/>
+                        </svg>
+                        スタート
+                    </button>
+                    <button id="resetBtn" class="pop-btn bg-slate-400 hover:bg-slate-300 border-slate-500 text-white font-bold py-3 px-4 rounded-xl shadow-lg h-12" disabled>
+                        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="currentColor" viewBox="0 0 16 16">
+                            <path fill-rule="evenodd" d="M8 3a5 5 0 1 0 4.546 2.914.5.5 0 0 1 .908-.417A6 6 0 1 1 8 2v1z"/>
+                            <path d="M8 4.466V.534a.25.25 0 0 1 .41-.192l2.36 1.966c.12.1.12.284 0 .384L8.41 4.658A.25.25 0 0 1 8 4.466z"/>
+                        </svg>
+                    </button>
+                </div>
+
+                <!-- 波形キャンバス -->
+                <div class="relative w-full h-12 bg-white rounded-lg overflow-hidden border-2 border-slate-200">
+                    <div class="absolute inset-0 opacity-10" style="background-image: linear-gradient(#000 1px, transparent 1px), linear-gradient(90deg, #000 1px, transparent 1px); background-size: 10px 10px;"></div>
+                    <canvas id="visualizer" class="w-full h-full block relative z-10"></canvas>
+                    <!-- スレッショルドライン -->
+                    <div id="thresholdLine" class="absolute left-0 w-full h-0.5 bg-amber-400 z-20 pointer-events-none transition-all duration-75" style="bottom: 30%;"></div>
+                </div>
+
+                <!-- スレッショルド調整スライダー -->
+                <div class="pb-1">
+                    <div class="flex justify-between text-xs text-amber-800/60 font-bold mb-1">
+                        <span>マイクの感度 (音の大きさ)</span>
+                        <span id="thresholdVal">30%</span>
+                    </div>
+                    <input type="range" id="thresholdSlider" min="1" max="100" value="30" class="w-full block">
+                </div>
+            </div>
+
+        </main>
+    </div>
+
+    <script>
+        // DOM Elements
+        const startBtn = document.getElementById('startBtn');
+        const resetBtn = document.getElementById('resetBtn');
+        const swapBtn = document.getElementById('swapBtn');
+        const bpmDisplay = document.getElementById('bpmDisplay');
+        const deviationDisplay = document.getElementById('deviationDisplay');
+        const adviceText = document.getElementById('adviceText');
+        const adviceBox = document.getElementById('adviceBox');
+        
+        const intervalADisplay = document.getElementById('intervalA');
+        const intervalBDisplay = document.getElementById('intervalB');
+        const containerA = document.getElementById('containerA');
+        const containerB = document.getElementById('containerB');
+        
+        const beatIndicator = document.getElementById('beatIndicator');
+        const canvas = document.getElementById('visualizer');
+        const canvasCtx = canvas.getContext('2d');
+        const thresholdSlider = document.getElementById('thresholdSlider');
+        const thresholdLine = document.getElementById('thresholdLine');
+        const thresholdValDisplay = document.getElementById('thresholdVal');
+
+        // Note: 強制スケーリング関数(adjustScale)を削除しました。
+        // Flexboxが自動的にレイアウトを調整します。
+
+        // Audio Variables
+        let audioCtx;
+        let analyser;
+        let scriptProcessor;
+        let source;
+        let isRunning = false;
+        let animationId;
+
+        // Logic Variables
+        let threshold = 0.09; 
+        let lastClickTime = 0;
+        let intervals = []; 
+        let beatCounter = 0; 
+        let isInverted = false; 
+        const MIN_INTERVAL_S = 0.1; 
+        const HISTORY_SIZE = 12;
+
+        let valA = null;
+        let valB = null;
+
+        // Canvas Setup
+        function resizeCanvas() {
+            canvas.width = canvas.clientWidth;
+            canvas.height = canvas.clientHeight;
+        }
+        window.addEventListener('resize', resizeCanvas);
+        // Canvas初期化は少し待ってから（レイアウト確定後）
+        setTimeout(resizeCanvas, 100);
+
+        // UI Listeners
+        thresholdSlider.addEventListener('input', (e) => {
+            const val = parseInt(e.target.value);
+            const normalized = val / 100;
+            threshold = Math.pow(normalized, 2);
+            
+            thresholdLine.style.bottom = `${val}%`;
+            thresholdValDisplay.textContent = `${val}%`;
+        });
+
+        swapBtn.addEventListener('click', () => {
+            isInverted = !isInverted;
+            
+            if (valA !== null && valB !== null) {
+                const tempVal = valA;
+                valA = valB;
+                valB = tempVal;
+                
+                intervalADisplay.textContent = Math.round(valA);
+                intervalBDisplay.textContent = Math.round(valB);
+                
+                const classA = intervalADisplay.className;
+                const isAActive = classA.includes("active-value");
+                
+                if (isAActive) {
+                    intervalADisplay.className = "mono-font text-xl font-bold text-slate-300 inactive-value";
+                    intervalBDisplay.className = "mono-font text-3xl font-bold text-sky-400 active-value";
+                } else {
+                    intervalADisplay.className = "mono-font text-3xl font-bold text-pink-400 active-value";
+                    intervalBDisplay.className = "mono-font text-xl font-bold text-slate-300 inactive-value";
+                }
+                
+                const bgA = containerA.className.includes("border-pink-200");
+                const bgB = containerB.className.includes("border-sky-200");
+                
+                containerA.className = "relative rounded-xl p-3 bg-slate-50 border-2 border-slate-100 transition-colors pb-6 h-full flex flex-col justify-center";
+                containerB.className = "relative rounded-xl p-3 bg-slate-50 border-2 border-slate-100 transition-colors pb-6 h-full flex flex-col justify-center";
+                
+                if (bgB) {
+                    containerA.classList.add("bg-sky-50", "border-sky-200");
+                    containerA.classList.remove("bg-slate-50", "border-slate-100");
+                }
+                if (bgA) {
+                    containerB.classList.add("bg-pink-50", "border-pink-200");
+                    containerB.classList.remove("bg-slate-50", "border-slate-100");
+                }
+
+                recalcDeviation();
+            }
+
+            swapBtn.classList.add('bg-amber-100', 'border-amber-300');
+            setTimeout(() => {
+                swapBtn.classList.remove('bg-amber-100', 'border-amber-300');
+            }, 200);
+        });
+
+        async function startAudio() {
+            try {
+                // 【修正】再開時に前回の時間の蓄積が邪魔をしないようにリセット
+                // これがないと、AudioContext再生成で時間が若返った時に差分がマイナスになり反応しなくなる
+                lastClickTime = 0; 
+
+                const AudioContext = window.AudioContext || window.webkitAudioContext;
+                audioCtx = new AudioContext();
+                
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                source = audioCtx.createMediaStreamSource(stream);
+                analyser = audioCtx.createAnalyser();
+                analyser.fftSize = 2048; 
+                scriptProcessor = audioCtx.createScriptProcessor(512, 1, 1);
+                
+                source.connect(analyser);
+                analyser.connect(scriptProcessor);
+                scriptProcessor.connect(audioCtx.destination);
+
+                scriptProcessor.onaudioprocess = function(e) {
+                    const inputBuffer = e.inputBuffer;
+                    const inputData = inputBuffer.getChannelData(0);
+                    const bufferStartTime = e.playbackTime;
+
+                    for (let i = 0; i < inputData.length; i++) {
+                        if (Math.abs(inputData[i]) > threshold) {
+                            const preciseTime = bufferStartTime + (i / inputBuffer.sampleRate);
+                            if (preciseTime - lastClickTime > MIN_INTERVAL_S) {
+                                if (lastClickTime !== 0) {
+                                    const interval = (preciseTime - lastClickTime) * 1000;
+                                    handleBeat(interval);
+                                }
+                                lastClickTime = preciseTime;
+                                requestAnimationFrame(() => {
+                                    beatIndicator.classList.remove('beat-flash');
+                                    void beatIndicator.offsetWidth; 
+                                    beatIndicator.classList.add('beat-flash');
+                                    beatIndicator.style.backgroundColor = '#F472B6';
+                                });
+                                break; 
+                            }
+                        }
+                    }
+                };
+
+                isRunning = true;
+                updateStartButtonState(true);
+                drawVisualizer();
+                adviceText.textContent = "音を聞いているよ...";
+                adviceText.className = "text-sm font-bold text-amber-600 animate-pulse";
+
+            } catch (err) {
+                console.error('Microphone Error:', err);
+                alert('マイクが使えません。設定をかくにんしてね。');
+            }
+        }
+
+        function stopAudio() {
+            isRunning = false;
+            cancelAnimationFrame(animationId);
+            if (scriptProcessor) {
+                scriptProcessor.disconnect();
+                scriptProcessor.onaudioprocess = null;
+            }
+            if (source) source.disconnect();
+            if (audioCtx) audioCtx.close();
+            updateStartButtonState(false);
+        }
+
+        function handleBeat(intervalMs) {
+            intervals.push(intervalMs);
+            if (intervals.length > HISTORY_SIZE) intervals.shift();
+            beatCounter++;
+            requestAnimationFrame(() => updateUI(intervalMs));
+        }
+
+        function updateUI(latestInterval) {
+            const isTargetA = isInverted ? (beatCounter % 2 === 0) : (beatCounter % 2 === 1);
+            
+            if (isTargetA) {
+                valA = latestInterval;
+                intervalADisplay.textContent = Math.round(valA);
+                intervalADisplay.className = "mono-font text-3xl font-bold text-pink-400 active-value";
+                intervalBDisplay.className = "mono-font text-xl font-bold text-slate-300 inactive-value";
+                
+                containerA.classList.add("bg-pink-50", "border-pink-200");
+                containerA.classList.remove("bg-slate-50", "border-slate-100");
+                
+                containerB.classList.remove("bg-sky-50", "border-sky-200");
+                containerB.classList.add("bg-slate-50", "border-slate-100");
+            } else {
+                valB = latestInterval;
+                intervalBDisplay.textContent = Math.round(valB);
+                intervalBDisplay.className = "mono-font text-3xl font-bold text-sky-400 active-value";
+                intervalADisplay.className = "mono-font text-xl font-bold text-slate-300 inactive-value";
+                
+                containerB.classList.add("bg-sky-50", "border-sky-200");
+                containerB.classList.remove("bg-slate-50", "border-slate-100");
+                
+                containerA.classList.remove("bg-pink-50", "border-pink-200");
+                containerA.classList.add("bg-slate-50", "border-slate-100");
+            }
+
+            if (intervals.length < 2) return;
+
+            const sum = intervals.reduce((a, b) => a + b, 0);
+            const avgMs = sum / intervals.length;
+            const bpm = 60000 / avgMs;
+            bpmDisplay.textContent = bpm.toFixed(1);
+
+            recalcDeviation();
+        }
+
+        function recalcDeviation() {
+            if (valA === null || valB === null) return;
+
+            const diff = valB - valA;
+            const avgPair = (valA + valB) / 2;
+            
+            const deviation = (diff / avgPair) * 100;
+            const signedStr = (deviation >= 0 ? "+" : "") + deviation.toFixed(1);
+            
+            deviationDisplay.textContent = signedStr;
+
+            const absDev = Math.abs(deviation);
+            if (absDev < 1.0) {
+                deviationDisplay.className = "text-5xl font-bold text-emerald-400 mono-font"; 
+            } else if (absDev < 3.0) {
+                deviationDisplay.className = "text-5xl font-bold text-amber-400 mono-font"; 
+            } else {
+                deviationDisplay.className = "text-5xl font-bold text-rose-400 mono-font"; 
+            }
+
+            generateAdvice(deviation);
+        }
+
+        function generateAdvice(deviation) {
+            const absDev = Math.abs(deviation);
+            
+            if (absDev < 0.5) {
+                adviceText.innerHTML = `<span class="text-emerald-500 font-black text-lg">バッチリ！</span><br>完ぺきだよ！`;
+                adviceText.className = "text-base font-bold text-emerald-600 text-center leading-tight";
+                adviceBox.className = "py-3 px-3 rounded-xl bg-emerald-50 border-2 border-emerald-200 min-h-[60px] flex items-center justify-center flex-grow-0";
+                return;
+            }
+
+            adviceBox.className = "py-3 px-3 rounded-xl bg-amber-50 border-2 border-amber-100 min-h-[60px] flex items-center justify-center flex-grow-0";
+            adviceText.className = "text-base font-bold text-amber-800";
+
+            let direction = "";
+            
+            if (deviation > 0) {
+                direction = `
+                    <span class="text-sky-500 font-black text-lg">左足</span>を下げる
+                    <span class="text-xs text-amber-500 mx-1 font-bold">or</span>
+                    <span class="text-sky-500 font-black text-lg">右足</span>を上げる
+                `;
+            } else {
+                direction = `
+                    <span class="text-sky-500 font-black text-lg">左足</span>を上げる
+                    <span class="text-xs text-amber-500 mx-1 font-bold">or</span>
+                    <span class="text-sky-500 font-black text-lg">右足</span>を下げる
+                `;
+            }
+
+            adviceText.innerHTML = `
+                <div class="flex flex-col gap-0.5 items-center text-center leading-tight">
+                    <div>${direction}</div>
+                </div>
+            `;
+        }
+
+        function drawVisualizer() {
+            if (!isRunning) return;
+            animationId = requestAnimationFrame(drawVisualizer);
+
+            const bufferLength = analyser.frequencyBinCount;
+            const dataArray = new Uint8Array(bufferLength);
+            analyser.getByteTimeDomainData(dataArray);
+
+            canvasCtx.fillStyle = '#ffffff';
+            canvasCtx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            canvasCtx.lineWidth = 3;
+            canvasCtx.strokeStyle = '#F472B6'; 
+            canvasCtx.lineCap = 'round';
+            canvasCtx.lineJoin = 'round';
+            canvasCtx.beginPath();
+
+            const sliceWidth = canvas.width * 1.0 / bufferLength;
+            let x = 0;
+
+            for(let i = 0; i < bufferLength; i++) {
+                const v = dataArray[i] / 128.0;
+                const y = v * canvas.height / 2;
+
+                if(i === 0) canvasCtx.moveTo(x, y);
+                else canvasCtx.lineTo(x, y);
+                x += sliceWidth;
+            }
+            canvasCtx.stroke();
+        }
+
+        function updateStartButtonState(active) {
+            if (active) {
+                startBtn.innerHTML = `<span class="animate-pulse">聞いてるよ♪</span>`;
+                startBtn.classList.remove('bg-sky-400', 'hover:bg-sky-300', 'border-sky-500');
+                startBtn.classList.add('bg-pink-400', 'hover:bg-pink-300', 'border-pink-500');
+                startBtn.onclick = stopAudio;
+                resetBtn.disabled = false;
+                resetBtn.classList.remove('bg-slate-400', 'border-slate-500');
+                resetBtn.classList.add('bg-amber-400', 'hover:bg-amber-300', 'border-amber-500');
+            } else {
+                startBtn.innerHTML = `
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="currentColor" viewBox="0 0 16 16">
+                        <path d="M8 15A7 7 0 1 1 8 1a7 7 0 0 1 0 14zm0 1A8 8 0 1 0 8 0a8 8 0 0 0 0 16z"/>
+                        <path d="M6.271 5.055a.5.5 0 0 1 .52.038l3.5 2.5a.5.5 0 0 1 0 .814l-3.5 2.5A.5.5 0 0 1 6 10.5v-5a.5.5 0 0 1 .271-.445z"/>
+                    </svg>
+                    スタート
+                `;
+                startBtn.classList.add('bg-sky-400', 'hover:bg-sky-300', 'border-sky-500');
+                startBtn.classList.remove('bg-pink-400', 'hover:bg-pink-300', 'border-pink-500');
+                startBtn.onclick = startAudio;
+                
+                resetBtn.classList.add('bg-slate-400', 'border-slate-500');
+                resetBtn.classList.remove('bg-amber-400', 'hover:bg-amber-300', 'border-amber-500');
+            }
+        }
+
+        resetBtn.addEventListener('click', () => {
+            intervals = [];
+            lastClickTime = 0;
+            beatCounter = 0;
+            valA = null;
+            valB = null;
+            bpmDisplay.textContent = "--.-";
+            deviationDisplay.textContent = "--";
+            deviationDisplay.className = "text-5xl font-bold text-slate-300 mono-font";
+            intervalADisplay.textContent = "--";
+            intervalBDisplay.textContent = "--";
+            adviceText.textContent = "じゅんびOK！「スタート」をおしてね";
+            adviceText.className = "text-sm font-bold text-amber-800/60";
+            adviceBox.className = "py-3 px-3 rounded-xl bg-amber-50 border-2 border-amber-100 min-h-[60px] flex items-center justify-center flex-grow-0";
+            
+            containerA.className = "relative rounded-xl p-3 bg-slate-50 border-2 border-slate-100 transition-colors pb-6 h-full flex flex-col justify-center";
+            containerB.className = "relative rounded-xl p-3 bg-slate-50 border-2 border-slate-100 transition-colors pb-6 h-full flex flex-col justify-center";
+            intervalADisplay.className = "mono-font text-3xl font-bold text-slate-300 inactive-value";
+            intervalBDisplay.className = "mono-font text-3xl font-bold text-slate-300 inactive-value";
+        });
+
+        {
+            const val = 30;
+            const normalized = val / 100;
+            threshold = Math.pow(normalized, 2);
+        }
+
+        startBtn.onclick = startAudio;
+
+    </script>
+</body>
+</html>
